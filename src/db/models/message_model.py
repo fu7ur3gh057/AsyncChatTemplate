@@ -25,27 +25,22 @@ class MessageStatus(TimestampMixin):
 class Message(TimestampMixin):
     id = fields.IntField(pk=True)
 
-    sender = fields.ForeignKeyField(
-        'models.User', related_name='sent_messages'
-    )
-    chat = fields.ForeignKeyField(
-        'models.Chat', related_name='messages', null=True
-    )
+    sender = fields.ForeignKeyField("models.User", related_name="sent_messages")
+    chat = fields.ForeignKeyField("models.Chat", related_name="messages", null=True)
     channel = fields.ForeignKeyField(
-        'models.Channel', related_name='messages', null=True
+        "models.Channel", related_name="messages", null=True
     )
 
     text = fields.TextField(null=True)
     is_reply = fields.BooleanField(default=False)
     reply_to = fields.ForeignKeyField(
-        'models.Message', related_name='replies', null=True
+        "models.Message", related_name="replies", null=True
     )
 
     is_read = fields.BooleanField(default=False)
 
     class Meta:
         table = "messages_message"
-
 
     def __str__(self) -> str:
         return f"Message #{self.id}"
@@ -54,7 +49,7 @@ class Message(TimestampMixin):
 class Attachment(TimestampMixin):
     id = fields.IntField(pk=True)
 
-    message = fields.ForeignKeyField('models.Message', related_name='attachments')
+    message = fields.ForeignKeyField("models.Message", related_name="attachments")
     file_url = fields.CharField(max_length=1024)
     file_type = fields.CharEnumField(AttachmentType)
 

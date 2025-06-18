@@ -7,4 +7,3 @@ class AttachmentType(str, Enum):
     AUDIO = "audio"
     VIDEO = "video"
     DOCUMENT = "document"
-
