@@ -1,0 +1,95 @@
+version: "3.8"
+services:
+  # Postgres / Multiple Databases
+  postgres:
+    restart: always
+    container_name: postgres
+    image: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1234
+      POSTGRES_DB: elite_go_db
+    expose:
+      - 5432
+    healthcheck:
+      test: [ "CMD", "pg_isready","-q","-d", "elite_go_db", "-U","postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ego-net
+  # Redis
+  redis:
+    restart: always
+    image: redis:5
+    container_name: redis
+    command: ["redis-server", "--dir", "/var/lib/redis"]
+    volumes:
+      - redis-data:/var/lib/redis
+    ports:
+      - "0.0.0.0:6378:6379"
+    expose:
+      - 6379
+    healthcheck:
+      test: [ "CMD", "redis-cli","ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ego-net
+  # FastAPI Server
+  server:
+    restart: always
+    container_name: server
+    build:
+      context: backend/Back-E-GO
+      dockerfile: server.Dockerfile
+    env_file:
+      - /opt/elite-go/backend/Back-E-GO/.env
+    expose:
+      - 8080
+    healthcheck:
+      test: [ "CMD","curl", "-f", "http://0.0.0.0:8080/api/health" ]
+      interval: 10s
+      timeout: 30s
+      retries: 20
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - ego-net
+  # TaskIQ / Worker
+  worker:
+    restart: always
+    container_name: worker
+    build:
+      context: backend/Back-E-GO
+      dockerfile: worker.Dockerfile
+    env_file:
+      - /opt/elite-go/backend/Back-E-GO/.env
+    volumes:
+      - redis-data:/var/lib/redis
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          memory: 256M
+    depends_on:
+      server:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ego-net
+
+networks:
+  ego-net:
+    driver: bridge
+
+volumes:
+  postgres-data: { }
+  redis-data: { }

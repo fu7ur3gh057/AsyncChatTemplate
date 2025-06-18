@@ -1,0 +1,184 @@
+version: "3.8"
+services:
+  # Postgres
+  postgres:
+    restart: always
+    container_name: postgres
+    image: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1234
+      POSTGRES_DB: elite_go_db
+    expose:
+      - 5432
+    healthcheck:
+      test: [ "CMD", "pg_isready","-q","-d", "elite_go_db", "-U","postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ego-net
+  # Redis
+  redis:
+    restart: always
+    image: redis:5
+    container_name: redis
+    command: ["redis-server", "--dir", "/var/lib/redis"]
+    volumes:
+      - redis-data:/var/lib/redis
+    ports:
+      - "0.0.0.0:6378:6379"
+    expose:
+      - 6379
+    healthcheck:
+      test: [ "CMD", "redis-cli","ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ego-net
+  # FastAPI
+  server:
+    restart: always
+    container_name: server
+    build:
+      context: backend/Back-E-GO
+      dockerfile: ./deploy/docker/server.Dockerfile
+    env_file:
+      - /opt/elite-go/backend/Back-E-GO/.env
+    expose:
+      - 8080
+    healthcheck:
+      test: [ "CMD","curl", "-f", "http://0.0.0.0:8080/api/health" ]
+      interval: 10s
+      timeout: 30s
+      retries: 20
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - ego-net
+  # TaskIQ
+  worker:
+    restart: always
+    container_name: worker
+    build:
+      context: backend/Back-E-GO
+      dockerfile: ./deploy/docker/worker.Dockerfile
+    env_file:
+      - /opt/elite-go/backend/Back-E-GO/.env
+    volumes:
+      - redis-data:/var/lib/redis
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          memory: 256M
+    depends_on:
+      server:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ego-net
+  # NextJS
+  client:
+    build:
+      context: frontend/EliteGo-Front
+      dockerfile: ./deploy/Dockerfile
+    container_name: client
+    ports:
+      - "3000:3000"
+    networks:
+      - ego-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+  # Sentry Telegram Bot
+  sentry_bot:
+    container_name: sentry_bot
+    build:
+      context: ./monitor/EliteGo-Monitor
+      dockerfile: ./deploy/Dockerfile
+    env_file:
+      - ./monitor/EliteGo-Monitor/.env
+    ports:
+      - "8089:8089"
+    depends_on:
+      - server
+    restart: always
+    networks:
+      - ego-net
+  # NGINX
+  nginx:
+    container_name: nginx
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /opt/elite-go/nginx/testteorux.crt:/etc/nginx/ssl/testteorux.crt:ro
+      - /opt/elite-go/nginx/testteorux.key:/etc/nginx/ssl/testteorux.key:ro
+      - /opt/elite-go/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      server:
+        condition: service_healthy
+    networks:
+      - ego-net
+  # MONITORING
+#  grafana:
+#    image: grafana/grafana
+#    container_name: grafana
+#    ports:
+#      - "3500:3000"
+#    volumes:
+#      - grafana-storage:/var/lib/grafana
+#  prometheus:
+#    image: prom/prometheus
+#    container_name: prometheus
+#    volumes:
+#      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+#    ports:
+#      - "9090:9090"
+#  redis_exporter:
+#    image: oliver006/redis_exporter
+#    container_name: redis_exporter
+#    ports:
+#      - "9121:9121"
+#    environment:
+#      - REDIS_ADDR=redis:6379
+#    networks:
+#      - ego-net
+#    depends_on:
+#      redis:
+#        condition: service_healthy
+#  postgres_exporter:
+#    image: prometheuscommunity/postgres-exporter
+#    container_name: postgres_exporter
+#    ports:
+#      - "9187:9187"
+#    environment:
+#      DATA_SOURCE_NAME: "postgresql://postgres:1234@postgres:5432/elite_go_db?sslmode=disable"
+#    networks:
+#      - ego-net
+#    depends_on:
+#      postgres:
+#        condition: service_healthy
+
+networks:
+  ego-net:
+    driver: bridge
+
+volumes:
+  postgres-data: { }
+  redis-data: { }
+#  grafana-storage: { }
